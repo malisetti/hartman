@@ -1,4 +1,4 @@
-// Package hartman supervises and keeps n workers at all times by restarting finished workers. https://en.wikipedia.org/wiki/Full_Metal_Jacket
+// Package hartman supervises and keeps n workers at all times. https://en.wikipedia.org/wiki/Full_Metal_Jacket
 package hartman
 
 import (
