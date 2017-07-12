@@ -93,3 +93,36 @@ func (s *Supervisor) Supervise() {
 		s.DoneHandler()
 	}
 }
+
+// RunGroup runs fns concurrently, finishes if any worker errors
+func RunGroup(ctx context.Context, fns ...Worker) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	errors := make(chan error)
+	var wg sync.WaitGroup
+	go func() {
+		wg.Wait()
+		close(errors)
+	}()
+
+	for _, fn := range fns {
+		wg.Add(1)
+		go func(fn Worker) {
+			defer wg.Done()
+			err := fn.Work(ctx)
+
+			if err != nil {
+				errors <- err
+			}
+		}(fn)
+	}
+
+	for err := range errors {
+		log.Printf("not able to run worker, failed with: %v", err)
+
+		return err
+	}
+
+	return nil
+}

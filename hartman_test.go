@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math/rand"
 	"strconv"
 	"testing"
 	"time"
@@ -28,9 +29,11 @@ func (w *LazyWorker) Work(ctx context.Context) error {
 
 func TestSupervise(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	time.AfterFunc(20*time.Second, func() {
+	ti := time.AfterFunc(20*time.Second, func() {
 		cancel()
 	})
+	defer ti.Stop()
+
 	numWorkers := 2
 	s := NewSupervisor(ctx, numWorkers, &LazyWorker{})
 
@@ -69,9 +72,11 @@ func (w *LazyWorker2) Work(ctx context.Context) error {
 
 func TestSupervise2(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	time.AfterFunc(20*time.Second, func() {
+	ti := time.AfterFunc(20*time.Second, func() {
 		cancel()
 	})
+	defer ti.Stop()
+
 	numWorkers := 2
 	workChan := make(chan string)
 	go func() {
@@ -94,4 +99,65 @@ func TestSupervise2(t *testing.T) {
 	})
 
 	s.Supervise()
+}
+
+/**
+	Will try make sandwich
+	need tomoto shopper
+	need cheese shopper
+	need waiter
+**/
+
+type TShopper struct {
+}
+
+type CShopper struct {
+}
+
+type SWaiter struct {
+}
+
+func (w *TShopper) Work(ctx context.Context) error {
+	select {
+	case <-time.After(5 * time.Second):
+		log.Println("shopped tomatoes")
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("could not shop tomatoes")
+	}
+}
+
+func (w *CShopper) Work(ctx context.Context) error {
+	select {
+	case <-time.After(4 * time.Second):
+		r := rand.New(rand.NewSource(time.Now().UnixNano()))
+		if r.Intn(100)%2 == 0 {
+			return fmt.Errorf("cheese is not available. sorry, no sanwich")
+		}
+		log.Println("shopped cheese")
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("could not shop cheese")
+	}
+}
+
+func (w *SWaiter) Work(ctx context.Context) error {
+	select {
+	case <-time.After(10 * time.Second):
+		log.Printf("sandwich is ready")
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("order cancelled")
+	}
+}
+
+func TestRunGroup(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	err := RunGroup(ctx, &TShopper{}, &CShopper{}, &SWaiter{})
+
+	if err != nil {
+		t.Error(err)
+	}
 }
