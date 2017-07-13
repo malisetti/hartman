@@ -53,8 +53,8 @@ func (s *Supervisor) SetDoneHandler(doneHandler func()) {
 	s.DoneHandler = doneHandler
 }
 
-// Supervise starts the workers
-func (s *Supervisor) Supervise() {
+// Work implements Worker
+func (s *Supervisor) Work(ctx context.Context) error {
 	s.errors = make(chan error)
 	defer close(s.errors)
 
@@ -69,9 +69,8 @@ func (s *Supervisor) Supervise() {
 	go s.ErrorHandler(s.errors)
 
 	var wg sync.WaitGroup
-	wg.Add(s.NumberOfWorkers)
-
 	for i := 0; i < s.NumberOfWorkers; i++ {
+		wg.Add(1)
 		// start workers
 		go func(ctx context.Context) {
 			defer wg.Done()
@@ -85,22 +84,25 @@ func (s *Supervisor) Supervise() {
 					s.errors <- err
 				}
 			}
-		}(s.Ctx)
+		}(ctx)
 	}
-
 	wg.Wait()
+
 	if s.DoneHandler != nil {
 		s.DoneHandler()
 	}
+
+	return nil
 }
 
-// RunGroup runs fns concurrently, finishes if any worker errors
-func RunGroup(ctx context.Context, fns ...Worker) error {
+// RunC runs fns concurrently, finishes if any worker errors
+func RunC(ctx context.Context, fns ...Worker) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	errors := make(chan error)
 	var wg sync.WaitGroup
+
 	go func() {
 		wg.Wait()
 		close(errors)
@@ -119,10 +121,64 @@ func RunGroup(ctx context.Context, fns ...Worker) error {
 	}
 
 	for err := range errors {
-		log.Printf("not able to run worker, failed with: %v", err)
-
 		return err
 	}
 
 	return nil
+}
+
+// RunF runs fns concurrently, finishes if any worker successfully completes
+func RunF(ctx context.Context, fns ...Worker) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	done := make(chan error)
+	var wg sync.WaitGroup
+
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	for _, fn := range fns {
+		wg.Add(1)
+		go func(fn Worker) {
+			defer wg.Done()
+			err := fn.Work(ctx)
+
+			if err == nil {
+				done <- nil
+			}
+		}(fn)
+	}
+
+	return <-done
+}
+
+// RunS runs fns concurrently, restarts any fn that completes untill ctx is cancelled
+func RunS(ctx context.Context, fns ...Worker) <-chan error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	errors := make(chan error)
+	defer close(errors)
+	var wg sync.WaitGroup
+	go func() {
+		wg.Wait()
+	}()
+
+	for _, fn := range fns {
+		wg.Add(1)
+		go func(fn Worker) {
+			defer wg.Done()
+			for ctx.Err() == nil {
+				err := fn.Work(ctx)
+				if err != nil {
+					errors <- err
+				}
+			}
+		}(fn)
+	}
+
+	return errors
 }

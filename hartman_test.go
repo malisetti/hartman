@@ -47,7 +47,10 @@ func TestSupervise(t *testing.T) {
 		}
 	})
 
-	s.Supervise()
+	err := s.Work(ctx)
+	if err != nil {
+		t.Error(err)
+	}
 }
 
 type LazyWorker2 struct {
@@ -98,7 +101,10 @@ func TestSupervise2(t *testing.T) {
 		}
 	})
 
-	s.Supervise()
+	err := s.Work(ctx)
+	if err != nil {
+		t.Error(err)
+	}
 }
 
 /**
@@ -151,11 +157,11 @@ func (w *SWaiter) Work(ctx context.Context) error {
 	}
 }
 
-func TestRunGroup(t *testing.T) {
+func TestRunC(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	err := RunGroup(ctx, &TShopper{}, &CShopper{}, &SWaiter{})
+	err := RunC(ctx, &TShopper{}, &CShopper{}, &SWaiter{})
 
 	if err != nil {
 		t.Error(err)
